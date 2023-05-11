@@ -167,6 +167,10 @@ func (s *Server) Close() error {
 	)
 }
 
+func (s *Server) StopServer() error {
+	return common.Close(common.PtrOrNil(s.httpServer))
+}
+
 func (s *Server) Mode() string {
 	return s.mode
 }
