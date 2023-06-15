@@ -34,7 +34,6 @@ type Client struct {
 	transport  *http2.Transport
 	options    option.V2RayGRPCOptions
 	url        *url.URL
-	host       string
 }
 
 func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, options option.V2RayGRPCOptions, tlsConfig tls.Config) adapter.V2RayClientTransport {
@@ -55,24 +54,24 @@ func NewClient(ctx context.Context, dialer N.Dialer, serverAddr M.Socksaddr, opt
 			DisableCompression: true,
 		},
 		url: &url.URL{
-			Scheme:  "https",
-			Host:    serverAddr.String(),
-			Path:    "/" + options.ServiceName + "/Tun",
-			RawPath: "/" + url.PathEscape(options.ServiceName) + "/Tun",
+			Scheme: "https",
+			Host:   host,
+			Path:   "/" + options.ServiceName + "/Tun",
+			// for unescape path
+			Opaque: "//" + host + "/" + options.ServiceName + "/Tun",
 		},
-		host: host,
 	}
 
 	if tlsConfig == nil {
 		client.transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.STDConfig) (net.Conn, error) {
-			return dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
+			return dialer.DialContext(ctx, network, serverAddr)
 		}
 	} else {
 		if len(tlsConfig.NextProtos()) == 0 {
 			tlsConfig.SetNextProtos([]string{http2.NextProtoTLS})
 		}
 		client.transport.DialTLSContext = func(ctx context.Context, network, addr string, cfg *tls.STDConfig) (net.Conn, error) {
-			conn, err := dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
+			conn, err := dialer.DialContext(ctx, network, serverAddr)
 			if err != nil {
 				return nil, err
 			}
@@ -90,7 +89,6 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 		Body:   pipeInReader,
 		URL:    c.url,
 		Header: defaultClientHeader,
-		Host:   c.host,
 	}
 	request = request.WithContext(ctx)
 	conn := newLateGunConn(pipeInWriter)
