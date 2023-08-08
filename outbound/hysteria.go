@@ -4,8 +4,11 @@ package outbound
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sagernet/quic-go"
 	"github.com/sagernet/sing-box/adapter"
@@ -15,6 +18,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/hysteria"
+	"github.com/sagernet/sing-box/transport/hysteria/hop"
 	"github.com/sagernet/sing-quic"
 	hyCC "github.com/sagernet/sing-quic/hysteria2/congestion"
 	"github.com/sagernet/sing/common"
@@ -34,6 +38,8 @@ type Hysteria struct {
 	ctx          context.Context
 	dialer       N.Dialer
 	serverAddr   M.Socksaddr
+	hopPorts     string
+	hopInterval  time.Duration
 	tlsConfig    tls.Config
 	quicConfig   *quic.Config
 	authKey      []byte
@@ -42,7 +48,7 @@ type Hysteria struct {
 	recvBPS      uint64
 	connAccess   sync.Mutex
 	conn         quic.Connection
-	rawConn      net.Conn
+	rawConn      io.Closer
 	udpAccess    sync.RWMutex
 	udpSessions  map[uint32]chan *hysteria.UDPMessage
 	udpDefragger hysteria.Defragger
@@ -117,6 +123,9 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 	if err != nil {
 		return nil, err
 	}
+	if options.HopInterval < 10 {
+		options.HopInterval = 10
+	}
 	return &Hysteria{
 		myOutboundAdapter: myOutboundAdapter{
 			protocol:     C.TypeHysteria,
@@ -126,15 +135,17 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 			tag:          tag,
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
-		ctx:        ctx,
-		dialer:     outboundDialer,
-		serverAddr: options.ServerOptions.Build(),
-		tlsConfig:  tlsConfig,
-		quicConfig: quicConfig,
-		authKey:    auth,
-		xplusKey:   xplus,
-		sendBPS:    up,
-		recvBPS:    down,
+		ctx:         ctx,
+		dialer:      outboundDialer,
+		serverAddr:  options.ServerOptions.Build(),
+		hopPorts:    options.HopPorts,
+		hopInterval: time.Second * time.Duration(options.HopInterval),
+		tlsConfig:   tlsConfig,
+		quicConfig:  quicConfig,
+		authKey:     auth,
+		xplusKey:    xplus,
+		sendBPS:     up,
+		recvBPS:     down,
 	}, nil
 }
 
@@ -168,17 +179,54 @@ func (h *Hysteria) offer(ctx context.Context) (quic.Connection, error) {
 }
 
 func (h *Hysteria) offerNew(ctx context.Context) (quic.Connection, error) {
-	udpConn, err := h.dialer.DialContext(h.ctx, "udp", h.serverAddr)
-	if err != nil {
-		return nil, err
-	}
+	var addr net.Addr
 	var packetConn net.PacketConn
-	packetConn = bufio.NewUnbindPacketConn(udpConn)
-	if h.xplusKey != nil {
-		packetConn = hysteria.NewXPlusPacketConn(packetConn, h.xplusKey)
+	var rawConn io.Closer
+	//
+	if h.hopPorts != "" {
+		hyAddrStr := h.serverAddr.AddrString()
+		if h.serverAddr.IsIPv6() {
+			hyAddrStr = fmt.Sprintf("[%s]", hyAddrStr)
+		}
+		hyAddrStr += ":" + h.hopPorts
+		host, ports, err := hop.ParseAddr(hyAddrStr)
+		if err != nil {
+			return nil, E.Cause(err, "hop.ParseAddr")
+		}
+		packetConn, addr, err = hop.NewUDPHopClientPacketConn(h.ctx, hyAddrStr, h.hopInterval, func() (net.PacketConn, error) {
+			return h.dialer.ListenPacket(h.ctx, M.ParseSocksaddrHostPort(host, ports[0]))
+		}, func(host string) (net.IP, error) {
+			if ip := net.ParseIP(host); ip != nil {
+				return ip, nil
+			}
+			ips, err := h.router.LookupDefault(h.ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			return ips[0].AsSlice(), nil
+		})
+		if err != nil {
+			return nil, E.Cause(err, "hop.NewUDPHopClientPacketConn")
+		}
+		rawConn = packetConn
+	} else {
+		udpConn, err := h.dialer.DialContext(h.ctx, "udp", h.serverAddr)
+		if err != nil {
+			return nil, err
+		}
+		addr = udpConn.RemoteAddr()
+		rawConn = udpConn
+		packetConn = bufio.NewUnbindPacketConn(udpConn)
 	}
-	packetConn = &hysteria.PacketConnWrapper{PacketConn: packetConn}
-	quicConn, err := qtls.Dial(h.ctx, packetConn, udpConn.RemoteAddr(), h.tlsConfig, h.quicConfig)
+	//
+	if h.xplusKey != nil {
+		packetConn = hysteria.NewXPlusPacketConn(packetConn, h.xplusKey, h.hopPorts != "")
+	}
+	if h.hopPorts == "" {
+		packetConn = &hysteria.PacketConnWrapper{PacketConn: packetConn}
+	}
+	//
+	quicConn, err := qtls.Dial(h.ctx, packetConn, addr, h.tlsConfig, h.quicConfig)
 	if err != nil {
 		packetConn.Close()
 		return nil, err
@@ -208,7 +256,7 @@ func (h *Hysteria) offerNew(ctx context.Context) (quic.Connection, error) {
 	}
 	quicConn.SetCongestionControl(hyCC.NewBrutalSender(serverHello.RecvBPS, false, nil))
 	h.conn = quicConn
-	h.rawConn = udpConn
+	h.rawConn = rawConn
 	return quicConn, nil
 }
 

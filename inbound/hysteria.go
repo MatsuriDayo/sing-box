@@ -141,7 +141,7 @@ func (h *Hysteria) Start() error {
 		return err
 	}
 	if len(h.xplusKey) > 0 {
-		packetConn = hysteria.NewXPlusPacketConn(packetConn, h.xplusKey)
+		packetConn = hysteria.NewXPlusPacketConn(packetConn, h.xplusKey, false)
 		packetConn = &hysteria.PacketConnWrapper{PacketConn: packetConn}
 	}
 	err = h.tlsConfig.Start()
