@@ -98,11 +98,16 @@ func (c *Client) DialContext(ctx context.Context) (net.Conn, error) {
 		response, err := c.transport.RoundTrip(request)
 		if err != nil {
 			conn.setup(nil, err)
+		} else if response == nil {
+			conn.setup(nil, E.New("nil response"))
 		} else if response.StatusCode != 200 {
 			response.Body.Close()
-			conn.setup(nil, E.New("unexpected status: ", response.Status))
-		} else {
+			conn.setup(nil, E.New("unexpected status: ", response.StatusCode, " ", response.Status))
+		} else if response.Body != nil {
+			// success
 			conn.setup(response.Body, nil)
+		} else {
+			conn.setup(nil, E.New("nil response body"))
 		}
 	}()
 	return conn, nil
