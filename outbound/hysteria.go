@@ -46,6 +46,9 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 		return nil, err
 	}
 	networkList := options.Network.Build()
+	if options.HopInterval < 5 {
+		options.HopInterval = 5
+	}
 	var password string
 	if options.AuthString != "" {
 		password = options.AuthString
@@ -70,20 +73,22 @@ func NewHysteria(ctx context.Context, router adapter.Router, logger log.ContextL
 		receiveBps = uint64(options.DownMbps) * hysteria.MbpsToBps
 	}
 	client, err := hysteria.NewClient(hysteria.ClientOptions{
-		Context:       ctx,
-		Dialer:        outboundDialer,
-		Logger:        logger,
-		ServerAddress: options.ServerOptions.Build(),
-		SendBPS:       sendBps,
-		ReceiveBPS:    receiveBps,
-		XPlusPassword: options.Obfs,
-		Password:      password,
-		TLSConfig:     tlsConfig,
-		UDPDisabled:   !common.Contains(networkList, N.NetworkUDP),
-
+		Context:             ctx,
+		Dialer:              outboundDialer,
+		Logger:              logger,
+		ServerAddress:       options.ServerOptions.Build(),
+		SendBPS:             sendBps,
+		ReceiveBPS:          receiveBps,
+		XPlusPassword:       options.Obfs,
+		Password:            password,
+		TLSConfig:           tlsConfig,
+		UDPDisabled:         !common.Contains(networkList, N.NetworkUDP),
 		ConnReceiveWindow:   options.ReceiveWindowConn,
 		StreamReceiveWindow: options.ReceiveWindow,
 		DisableMTUDiscovery: options.DisableMTUDiscovery,
+		//
+		HopPorts:    options.HopPorts,
+		HopInterval: options.HopInterval,
 	})
 	if err != nil {
 		return nil, err
