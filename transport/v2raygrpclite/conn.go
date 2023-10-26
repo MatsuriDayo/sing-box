@@ -60,9 +60,9 @@ func (c *GunConn) Read(b []byte) (n int, err error) {
 func (c *GunConn) read(b []byte) (n int, err error) {
 	if c.reader == nil {
 		<-c.create
-		if c.err != nil {
-			return 0, c.err
-		}
+	}
+	if c.err != nil {
+		return 0, c.err
 	}
 
 	if c.readRemaining > 0 {
