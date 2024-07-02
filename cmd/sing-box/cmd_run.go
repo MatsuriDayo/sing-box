@@ -1,4 +1,4 @@
-package main
+package boxmain
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sagernet/sing-box"
+	box "github.com/sagernet/sing-box"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"

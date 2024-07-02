@@ -1,4 +1,4 @@
-package main
+package boxmain
 
 import (
 	"context"
@@ -34,7 +34,7 @@ func init() {
 	mainCommand.PersistentFlags().BoolVarP(&disableColor, "disable-color", "", false, "disable color output")
 }
 
-func main() {
+func Main() {
 	if err := mainCommand.Execute(); err != nil {
 		log.Fatal(err)
 	}

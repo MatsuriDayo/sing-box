@@ -1,4 +1,4 @@
-package main
+package boxmain
 
 import (
 	"github.com/spf13/cobra"
