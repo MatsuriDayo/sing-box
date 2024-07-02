@@ -1,7 +1,7 @@
-package main
+package boxmain
 
 import (
-	"github.com/sagernet/sing-box"
+	box "github.com/sagernet/sing-box"
 	E "github.com/sagernet/sing/common/exceptions"
 	N "github.com/sagernet/sing/common/network"
 

@@ -1,6 +1,6 @@
 //go:build generate && generate_completions
 
-package main
+package boxmain
 
 import "github.com/sagernet/sing-box/log"
 

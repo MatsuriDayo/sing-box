@@ -1,10 +1,10 @@
 //go:build !generate
 
-package main
+package boxmain
 
 import "github.com/sagernet/sing-box/log"
 
-func main() {
+func Main() {
 	if err := mainCommand.Execute(); err != nil {
 		log.Fatal(err)
 	}

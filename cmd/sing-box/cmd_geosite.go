@@ -1,4 +1,4 @@
-package main
+package boxmain
 
 import (
 	"github.com/sagernet/sing-box/common/geosite"
