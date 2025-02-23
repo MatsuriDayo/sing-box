@@ -10,6 +10,7 @@ import (
 	"github.com/sagernet/sing-box/common/urltest"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
+	"github.com/sagernet/sing-box/nekoutils"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -54,7 +55,6 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		tags:                         options.Outbounds,
 		defaultTag:                   options.Default,
 		outbounds:                    make(map[string]adapter.Outbound),
-		history:                      service.PtrFromContext[urltest.HistoryStorage](ctx),
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
 	}
@@ -141,6 +141,9 @@ func (s *Selector) SelectOutbound(tag string) bool {
 	if s.history != nil {
 		s.history.NotifyUpdated()
 	}
+	if nekoutils.Selector_OnProxySelected != nil {
+		nekoutils.Selector_OnProxySelected(s.Tag(), tag)
+	}
 	return true
 }
 
@@ -194,4 +197,5 @@ func RealTag(outboundManager adapter.OutboundManager, detour adapter.Outbound) s
 			return tag
 		}
 	}
+	return detour.Tag()
 }
